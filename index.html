@@ -502,10 +502,9 @@
 
 <script>
 /* ============================================================
-   CONFIGURACIÓN — reemplace con la URL de su Apps Script Web App
-   (ver INSTRUCCIONES.md)
+   CONFIGURACIÓN — URL del backend en Apps Script
    ============================================================ */
-const API_URL = "PEGA_AQUI_LA_URL_DE_TU_GOOGLE_APPS_SCRIPT_WEB_APP";
+const API_URL = "https://script.google.com/macros/s/AKfycbywNCWY6SDCz9voluIwuMC5y2BCeGWX0ZGsg9BxKo-u8bV_2wNBT_o_vV3oh1aKyXH8lA/exec";
 
 /* ============================================================
    Definición de campos dinámicos por tipo de caso
@@ -550,9 +549,7 @@ const CASE_CONFIG = {
 };
 
 /**
- * IDs de los campos OBLIGATORIOS del paso 2 (Detalles del caso),
- * por tipo de trámite. Deben coincidir con los <span class="req">*
- * que se renderizan dinámicamente en renderCaseDetailsStep().
+ * IDs de los campos OBLIGATORIOS del paso 2 (Detalles del caso).
  */
 const CASE_REQUIRED_FIELDS = {
   asilo:      ["c-pais-origen","c-motivo"],
@@ -563,8 +560,6 @@ const CASE_REQUIRED_FIELDS = {
 
 /**
  * Etiquetas legibles para cada key interna del formulario.
- * Se usan en la pantalla de revisión (paso 5) para mostrar
- * "País de origen" en vez de "pais-origen".
  */
 const CASE_FIELD_LABELS = {
   "pais-origen": "País de origen",
@@ -611,7 +606,7 @@ let state = {
   personal: {},
   caseDetails: {},
   trips: [],
-  files: {}, // {docKey: [{name,size,type,base64|url,deleted?}]}
+  files: {},
 };
 
 let saveTimer = null;
@@ -622,10 +617,6 @@ let saveTimer = null;
 function $(sel, root=document){return root.querySelector(sel);}
 function $all(sel, root=document){return Array.from(root.querySelectorAll(sel));}
 
-/**
- * Escapa caracteres peligrosos para prevenir XSS al inyectar
- * datos del usuario en innerHTML.
- */
 function esc(value){
   if(value === null || value === undefined) return "";
   return String(value).replace(/[&<>"']/g, c => ({
@@ -989,7 +980,6 @@ function renderFileList(key){
   if(!list) return;
   const items = (state.files[key] || []).filter(f => !f.deleted);
   list.innerHTML = items.map((f,i)=>{
-    // El índice real en el array original puede diferir porque filtramos.
     const realIdx = state.files[key].indexOf(f);
     const tag = f.url
       ? `<span class="ftag">Subido ✓</span>`
@@ -1006,10 +996,8 @@ function renderFileList(key){
       const idx = Number(btn.dataset.i);
       const item = arr[idx];
       if(item && item.url){
-        // Ya estaba subido: marcar como deleted para que el backend lo borre
         item.deleted = true;
       } else {
-        // Nunca llegó al backend: eliminar del array
         arr.splice(idx, 1);
       }
       renderFileList(btn.dataset.key);
@@ -1027,14 +1015,12 @@ function renderReviewStep(){
     arr.forEach(f => { if(!f.deleted) filesCount++; });
   });
 
-  // --- Datos personales: mostrar TODOS los campos definidos (omite vacíos)
   const personalRows = Object.entries(PERSONAL_FIELD_LABELS).map(([key, label])=>{
     const value = state.personal[key];
     if(value === undefined || value === null || value === "") return "";
     return `<div class="review-row"><span class="k">${esc(label)}</span><span class="v">${esc(value)}</span></div>`;
   }).join("");
 
-  // --- Detalles del caso: usar etiquetas legibles y omitir vacíos
   const caseRows = Object.entries(state.caseDetails).map(([k,v])=>{
     if(v === undefined || v === null || v === "") return "";
     const label = CASE_FIELD_LABELS[k] || k;

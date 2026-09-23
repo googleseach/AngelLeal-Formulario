@@ -10,4 +10,18 @@ y suban sus documentos de respaldo.
 
 ---
 
+## Estado del proyecto
+
+| Componente | Estado |
+|---|---|
+| Frontend (`index.html`) | ✅ Funcionando |
+| Backend (`backend/Code.gs` en Apps Script) | ✅ Desplegado |
+| Google Sheet (base de datos) | ✅ Creada y probada |
+| Google Drive (documentos) | ✅ Creado y probado |
+| Prueba end-to-end | ✅ Pasada |
+| Documentación | ✅ En curso |
+| Despliegue público | ⏳ Pendiente |
+
+---
+
 ## Arquitectura

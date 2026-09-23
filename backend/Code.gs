@@ -9,8 +9,8 @@
  * VER INSTRUCCIONES.md PARA LOS PASOS DE INSTALACIÓN.
  */
 
-const SHEET_ID = "PEGA_AQUI_EL_ID_DE_TU_GOOGLE_SHEET";
-const DRIVE_FOLDER_ID = "PEGA_AQUI_EL_ID_DE_TU_CARPETA_DE_DRIVE";
+const SHEET_ID = "1LmaRu9IJnMwRpVVz1XF_PegLU6-9jcPdOV1gjFdGwig";
+const DRIVE_FOLDER_ID = "1OTUUjr-aKOiDcrkNqkS6r3-pT0WZ5wl-";
 
 const SHEET_USUARIOS = "Usuarios";
 const SHEET_SESIONES = "Sesiones";
@@ -43,6 +43,20 @@ function doPost(e) {
   return jsonOut(out);
 }
 
+/**
+ * Función de prueba: permite verificar desde el navegador que el
+ * Web App está desplegado y accesible. No se usa desde el formulario.
+ */
+function doGet(e) {
+  return ContentService
+    .createTextOutput(JSON.stringify({
+      ok: true,
+      message: "Backend funcionando correctamente.",
+      timestamp: new Date().toISOString()
+    }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
 function jsonOut(obj){
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
@@ -50,7 +64,6 @@ function jsonOut(obj){
 
 /**
  * Verifica que la configuración obligatoria esté completa.
- * Si no, devuelve un error claro para que el frontend lo muestre.
  */
 function assertConfig_(){
   if (!SHEET_ID || SHEET_ID.indexOf("PEGA_AQUI") === 0) {
@@ -130,7 +143,6 @@ function createSession(email) {
   const sheet = getSheet(SHEET_SESIONES);
   const expira = new Date(Date.now() + SESSION_DURATION_MS);
   sheet.appendRow([token, email, expira]);
-  // Limpieza oportunista: eliminar sesiones expiradas para no acumular basura
   limpiarSesionesExpiradas_(sheet);
   return token;
 }
@@ -139,13 +151,11 @@ function limpiarSesionesExpiradas_(sheet){
   try {
     const rows = sheet.getDataRange().getValues();
     const now = Date.now();
-    // Recorrer de abajo hacia arriba para poder borrar filas sin desajustar índices
     for (let i = rows.length - 1; i >= 1; i--) {
       const expira = new Date(rows[i][2]);
       if (expira.getTime() < now) sheet.deleteRow(i + 1);
     }
   } catch(e){
-    // Si falla la limpieza, no romper el login
     console.warn("No se pudieron limpiar sesiones expiradas:", e.message);
   }
 }
@@ -173,7 +183,7 @@ function guardarProgreso(req) {
 
   const progreso = req.progreso || {};
   const archivosGuardados = guardarArchivos(email, progreso.files || {});
-  progreso.files = archivosGuardados; // reemplaza base64 por URLs ya subidas
+  progreso.files = archivosGuardados;
 
   const lock = LockService.getScriptLock();
   try { lock.waitLock(LOCK_TIMEOUT_MS); }
@@ -213,7 +223,7 @@ function leerProgreso(email) {
     if (!raw) return null;
     return JSON.parse(raw);
   } catch (e) {
-    return null; // JSON corrupto: mejor devolver null que explotar
+    return null;
   }
 }
 
@@ -249,10 +259,6 @@ function enviarSolicitud(req) {
   }
 }
 
-/**
- * Encuentra la fila (1-indexada) del borrador del usuario.
- * Devuelve -1 si no existe.
- */
 function findDraftRow_(sheet, email){
   const rows = sheet.getDataRange().getValues();
   for (let i = 1; i < rows.length; i++) {
@@ -265,13 +271,6 @@ function findDraftRow_(sheet, email){
 
 /* ================= ARCHIVOS ================= */
 
-/**
- * Recibe { key: [{name,size,type,base64|url,deleted?}] } y:
- *  - sube los que traen base64 (los nuevos)
- *  - omite los que ya tienen url (ya subidos)
- *  - borra de Drive los que tengan deleted:true
- * Devuelve el mismo mapa sin los archivos borrados.
- */
 function guardarArchivos(email, filesByKey) {
   const folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
   const userFolder = getOrCreateSubfolder(folder, email);
@@ -281,14 +280,11 @@ function guardarArchivos(email, filesByKey) {
     const list = filesByKey[key] || [];
     const out = [];
     list.forEach(f => {
-      // Archivo marcado como eliminado: intentar borrar de Drive
       if (f && f.deleted) {
         if (f.url) borrarArchivoPorUrl_(f.url);
-        return; // no se incluye en el resultado
+        return;
       }
-      // Ya estaba subido: conservar como está
       if (f && f.url) { out.push(f); return; }
-      // Nunca subido: subir base64 a Drive
       if (!f || !f.base64) { out.push(f); return; }
       try {
         const bytes = Utilities.base64Decode(f.base64);
@@ -304,11 +300,6 @@ function guardarArchivos(email, filesByKey) {
   return result;
 }
 
-/**
- * Borra un archivo de Drive a partir de su URL pública
- * (ej. https://drive.google.com/file/d/FILE_ID/view?...).
- * Silencioso: si falla, no interrumpe el guardado.
- */
 function borrarArchivoPorUrl_(url){
   try {
     const m = String(url).match(/\/d\/([a-zA-Z0-9_-]+)/);

@@ -16,6 +16,7 @@
     --brass:#A9792C;
     --brass-dark:#8C6421;
     --red:#8B2E35;
+    --green:#2C6B33;
     --text:#1E232C;
     --text-muted:#5B6472;
     --line:#D9D3C5;
@@ -202,6 +203,7 @@
   }
   .file-item .fname{display:flex; gap:8px; align-items:center;}
   .file-item .fsize{color:var(--text-muted); font-size:.78rem;}
+  .file-item .ftag{color:var(--green); font-size:.75rem; font-weight:600;}
   .file-item button{background:none; border:none; color:var(--red); cursor:pointer; font-size:.8rem;}
   .doc-group{margin-bottom:26px;}
   .doc-group h3{font-size:.95rem; color:var(--ink); margin-bottom:4px;}
@@ -214,6 +216,15 @@
   .review-row:last-child{border-bottom:none;}
   .review-row .k{color:var(--text-muted);}
   .review-row .v{text-align:right; max-width:60%;}
+
+  /* privacy notice */
+  .privacy-notice{
+    background:#F4F6FA; border:1px solid var(--line-soft);
+    border-left:3px solid var(--brass);
+    padding:14px 16px; margin-bottom:18px; border-radius:var(--radius);
+    font-size:.82rem; color:var(--text-muted); line-height:1.5;
+  }
+  .privacy-notice strong{color:var(--ink);}
 
   /* footer nav */
   .step-nav{
@@ -254,6 +265,15 @@
   }
   .top-status button{background:none; border:none; color:var(--brass-dark); font-weight:600; cursor:pointer; font-size:.8rem;}
 
+  /* error banner */
+  .error-banner{
+    background:#FBEAEA; color:var(--red); border:1px solid #E5B8B8;
+    padding:12px 16px; margin:16px 28px 0; border-radius:var(--radius);
+    font-size:.85rem; display:none;
+  }
+  .error-banner.show{display:block;}
+  .error-banner code{background:#F7D8D8; padding:2px 6px; border-radius:2px; font-size:.78rem;}
+
   .hidden{display:none !important;}
 
   @media (max-width:860px){
@@ -275,6 +295,8 @@
   <div class="brand">Angel F. Leal, Jr., P.A.<small>Portal de solicitud de casos de inmigración</small></div>
   <div class="phone">(305) 856-3139</div>
 </header>
+
+<div id="error-banner" class="error-banner"></div>
 
 <div id="top-status" class="top-status hidden">
   <span id="user-email-label"></span>
@@ -444,6 +466,17 @@
       <h2 class="step-title">Revise y envíe</h2>
       <p class="step-sub">Verifique que la información sea correcta antes de enviar su solicitud a la oficina.</p>
       <div id="review-content"></div>
+
+      <div class="privacy-notice">
+        <strong>Aviso de privacidad:</strong> La información que usted proporcione
+        (incluyendo datos personales, migratorios y documentos adjuntos) será
+        utilizada exclusivamente por Angel F. Leal, Jr., P.A. para evaluar y
+        preparar su caso. Se almacena en Google Drive y Google Sheets bajo
+        acceso restringido al personal autorizado del despacho. No se comparte
+        con terceros sin su consentimiento, salvo cuando sea requerido por ley
+        o por una autoridad competente.
+      </div>
+
       <div class="field" style="margin-top:10px;">
         <label style="display:flex; align-items:flex-start; gap:10px; font-weight:500;">
           <input type="checkbox" id="confirm-truth" style="width:auto; margin-top:3px;">
@@ -516,6 +549,55 @@ const CASE_CONFIG = {
   }
 };
 
+/**
+ * IDs de los campos OBLIGATORIOS del paso 2 (Detalles del caso),
+ * por tipo de trámite. Deben coincidir con los <span class="req">*
+ * que se renderizan dinámicamente en renderCaseDetailsStep().
+ */
+const CASE_REQUIRED_FIELDS = {
+  asilo:      ["c-pais-origen","c-motivo"],
+  residencia: ["c-categoria"],
+  ciudadania: ["c-fecha-residencia"],
+  perdon:     ["c-motivo-inadmisibilidad"]
+};
+
+/**
+ * Etiquetas legibles para cada key interna del formulario.
+ * Se usan en la pantalla de revisión (paso 5) para mostrar
+ * "País de origen" en vez de "pais-origen".
+ */
+const CASE_FIELD_LABELS = {
+  "pais-origen": "País de origen",
+  "motivo": "Motivo de persecución",
+  "detenido": "¿Detenido o arrestado en su país?",
+  "dependientes": "Familiares dependientes",
+  "categoria": "Categoría",
+  "patrocinador": "Nombre del patrocinador",
+  "relacion-patrocinador": "Relación con el patrocinador",
+  "estatus-actual": "Estatus migratorio actual",
+  "fecha-residencia": "Fecha de residencia permanente",
+  "impuestos": "¿Impuestos al día?",
+  "antecedentes": "¿Antecedentes penales?",
+  "motivo-inadmisibilidad": "Motivo de inadmisibilidad",
+  "familiar-calificante": "Familiar calificante",
+  "relacion-familiar": "Relación con el familiar"
+};
+
+/**
+ * Etiquetas legibles para los campos del paso 1 (Datos personales).
+ */
+const PERSONAL_FIELD_LABELS = {
+  "nombres": "Nombre(s)",
+  "apellidos": "Apellido(s)",
+  "nacimiento": "Fecha de nacimiento",
+  "pais-nacimiento": "País de nacimiento",
+  "telefono": "Teléfono",
+  "anumber": "A-Number",
+  "direccion": "Dirección",
+  "estado-civil": "Estado civil",
+  "fecha-entrada": "Fecha de entrada a EE.UU."
+};
+
 const STEPS = ["Tipo de trámite","Datos personales","Detalles del caso","Documentos","Revisión y envío"];
 
 /* ============================================================
@@ -529,7 +611,7 @@ let state = {
   personal: {},
   caseDetails: {},
   trips: [],
-  files: {}, // {docKey: [{name,size,base64}]}
+  files: {}, // {docKey: [{name,size,type,base64|url,deleted?}]}
 };
 
 let saveTimer = null;
@@ -543,7 +625,6 @@ function $all(sel, root=document){return Array.from(root.querySelectorAll(sel));
 /**
  * Escapa caracteres peligrosos para prevenir XSS al inyectar
  * datos del usuario en innerHTML.
- * Uso: `<div>${esc(nombre)}</div>`
  */
 function esc(value){
   if(value === null || value === undefined) return "";
@@ -556,15 +637,31 @@ function esc(value){
   }[c]));
 }
 
+function showErrorBanner(msg){
+  const el = $("#error-banner");
+  el.innerHTML = msg;
+  el.classList.add("show");
+}
+function hideErrorBanner(){
+  $("#error-banner").classList.remove("show");
+}
+
 async function apiCall(action, payload){
   const body = JSON.stringify({action, ...payload});
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: {"Content-Type":"text/plain;charset=utf-8"}, // evita preflight CORS
-    body
-  });
-  if(!res.ok) throw new Error("Error de red");
-  const data = await res.json();
+  let res;
+  try {
+    res = await fetch(API_URL, {
+      method: "POST",
+      headers: {"Content-Type":"text/plain;charset=utf-8"},
+      body
+    });
+  } catch (netErr) {
+    throw new Error("No se pudo conectar con el servidor. Revise su conexión a internet.");
+  }
+  if(!res.ok) throw new Error("Error de red (" + res.status + "). Intente de nuevo.");
+  let data;
+  try { data = await res.json(); }
+  catch(e){ throw new Error("El servidor devolvió una respuesta inválida."); }
   if(data.error) throw new Error(data.error);
   return data;
 }
@@ -577,6 +674,20 @@ function fileToBase64(file){
     r.readAsDataURL(file);
   });
 }
+
+/* ============================================================
+   Validación de configuración al cargar
+   ============================================================ */
+(function checkApiUrl(){
+  if(typeof API_URL !== "string" || !API_URL.endsWith("/exec")){
+    console.warn("[Config] API_URL debe terminar en /exec. Valor actual:", API_URL);
+    showErrorBanner(
+      "⚠️ El formulario aún no está conectado al backend. " +
+      "Configure la constante <code>API_URL</code> en <code>index.html</code> con la URL " +
+      "de su Apps Script Web App (debe terminar en <code>/exec</code>)."
+    );
+  }
+})();
 
 /* ============================================================
    AUTH
@@ -604,6 +715,7 @@ $("#login-form").addEventListener("submit", async (e)=>{
   const password = $("#login-password").value;
   try{
     const data = await apiCall("login", {email, password});
+    hideErrorBanner();
     onAuthed(data.sessionToken, email);
     if(data.progreso) restoreProgress(data.progreso);
   }catch(err){
@@ -623,6 +735,7 @@ $("#register-form").addEventListener("submit", async (e)=>{
   }
   try{
     const data = await apiCall("registrar", {name, email, password});
+    hideErrorBanner();
     onAuthed(data.sessionToken, email);
   }catch(err){
     showAuthMsg(err.message || "No se pudo crear la cuenta.", "error");
@@ -648,7 +761,6 @@ $("#logout-btn").addEventListener("click", ()=>{
   location.reload();
 });
 
-/* Reanudar sesión guardada en el navegador */
 window.addEventListener("DOMContentLoaded", ()=>{
   const token = localStorage.getItem("al_session");
   const email = localStorage.getItem("al_email");
@@ -718,11 +830,9 @@ function renderPersonalStep(){
   PERSONAL_FIELDS.forEach(f=>{
     const el = $("#p-"+f);
     if(!el) return;
-    // Refleja el valor guardado en el DOM (solo si hay valor guardado)
     if(state.personal[f] !== undefined && state.personal[f] !== null && state.personal[f] !== ""){
       el.value = state.personal[f];
     }
-    // Engancha el listener UNA SOLA VEZ (evita duplicados al re-renderizar)
     if(el.dataset.bound === "1") return;
     el.dataset.bound = "1";
     el.addEventListener("input", ()=>{
@@ -743,9 +853,11 @@ function renderCaseDetailsStep(){
   if(state.caseType === "asilo"){
     html = `
       <div class="field"><label>País de origen <span class="req">*</span></label>
-        <input type="text" id="c-pais-origen"></div>
+        <input type="text" id="c-pais-origen">
+        <div class="field-error">Ingrese su país de origen.</div></div>
       <div class="field"><label>Motivo de persecución <span class="req">*</span></label>
-        <textarea id="c-motivo" placeholder="Describa brevemente el motivo (religión, política, etc.) y los hechos relevantes."></textarea></div>
+        <textarea id="c-motivo" placeholder="Describa brevemente el motivo (religión, política, etc.) y los hechos relevantes."></textarea>
+        <div class="field-error">Describa el motivo de persecución.</div></div>
       <div class="field"><label>¿Ha sido detenido o arrestado en su país de origen por este motivo?</label>
         <select id="c-detenido"><option value="">Seleccione…</option><option>Sí</option><option>No</option></select></div>
       <div class="field"><label>Familiares dependientes que viajan con usted</label>
@@ -753,7 +865,8 @@ function renderCaseDetailsStep(){
   } else if(state.caseType === "residencia"){
     html = `
       <div class="field"><label>Categoría <span class="req">*</span></label>
-        <select id="c-categoria"><option value="">Seleccione…</option><option>Familiar</option><option>Empleo</option><option>Otra</option></select></div>
+        <select id="c-categoria"><option value="">Seleccione…</option><option>Familiar</option><option>Empleo</option><option>Otra</option></select>
+        <div class="field-error">Seleccione una categoría.</div></div>
       <div class="field"><label>Nombre del patrocinador</label>
         <input type="text" id="c-patrocinador"></div>
       <div class="field"><label>Relación con el patrocinador</label>
@@ -763,7 +876,8 @@ function renderCaseDetailsStep(){
   } else if(state.caseType === "ciudadania"){
     html = `
       <div class="field"><label>Fecha en que obtuvo la residencia permanente <span class="req">*</span></label>
-        <input type="date" id="c-fecha-residencia"></div>
+        <input type="date" id="c-fecha-residencia">
+        <div class="field-error">Ingrese la fecha de obtención de residencia.</div></div>
       <div class="field"><label>¿Sus declaraciones de impuestos están al día?</label>
         <select id="c-impuestos"><option value="">Seleccione…</option><option>Sí</option><option>No</option></select></div>
       <div class="field"><label>¿Tiene antecedentes penales, arrestos o citaciones?</label>
@@ -775,7 +889,8 @@ function renderCaseDetailsStep(){
   } else if(state.caseType === "perdon"){
     html = `
       <div class="field"><label>Motivo de inadmisibilidad <span class="req">*</span></label>
-        <textarea id="c-motivo-inadmisibilidad" placeholder="Ej. presencia ilegal, tergiversación, antecedente penal, etc."></textarea></div>
+        <textarea id="c-motivo-inadmisibilidad" placeholder="Ej. presencia ilegal, tergiversación, antecedente penal, etc."></textarea>
+        <div class="field-error">Describa el motivo de inadmisibilidad.</div></div>
       <div class="field"><label>Familiar ciudadano/residente calificante</label>
         <input type="text" id="c-familiar-calificante" placeholder="Nombre completo"></div>
       <div class="field"><label>Relación con dicho familiar</label>
@@ -783,7 +898,6 @@ function renderCaseDetailsStep(){
   }
   wrap.innerHTML = html;
 
-  // bind (el HTML se recrea cada vez, así que aquí SÍ hay que re-enganchar)
   $all("input, select, textarea", wrap).forEach(el=>{
     const key = el.id.replace("c-","");
     if(state.caseDetails[key]) el.value = state.caseDetails[key];
@@ -873,15 +987,31 @@ async function handleFiles(key, fileListObj){
 function renderFileList(key){
   const list = $(`[data-list="${key}"]`);
   if(!list) return;
-  const items = state.files[key] || [];
-  list.innerHTML = items.map((f,i)=>`
-    <div class="file-item">
-      <span class="fname">📄 ${esc(f.name)} <span class="fsize">(${(f.size/1024).toFixed(0)} KB)</span></span>
-      <button type="button" data-key="${esc(key)}" data-i="${i}">Quitar</button>
-    </div>`).join("");
+  const items = (state.files[key] || []).filter(f => !f.deleted);
+  list.innerHTML = items.map((f,i)=>{
+    // El índice real en el array original puede diferir porque filtramos.
+    const realIdx = state.files[key].indexOf(f);
+    const tag = f.url
+      ? `<span class="ftag">Subido ✓</span>`
+      : `<span class="fsize">(${(f.size/1024).toFixed(0)} KB)</span>`;
+    return `
+      <div class="file-item">
+        <span class="fname">📄 ${esc(f.name)} ${tag}</span>
+        <button type="button" data-key="${esc(key)}" data-i="${realIdx}">Quitar</button>
+      </div>`;
+  }).join("");
   $all("button[data-key]", list).forEach(btn=>{
     btn.addEventListener("click", ()=>{
-      state.files[btn.dataset.key].splice(Number(btn.dataset.i),1);
+      const arr = state.files[btn.dataset.key];
+      const idx = Number(btn.dataset.i);
+      const item = arr[idx];
+      if(item && item.url){
+        // Ya estaba subido: marcar como deleted para que el backend lo borre
+        item.deleted = true;
+      } else {
+        // Nunca llegó al backend: eliminar del array
+        arr.splice(idx, 1);
+      }
       renderFileList(btn.dataset.key);
       scheduleSave();
     });
@@ -890,11 +1020,26 @@ function renderFileList(key){
 
 /* --- Paso 4: revisión --- */
 function renderReviewStep(){
-  const cfg = CASE_CONFIG[state.caseType] || CASE_CONFIG.residencia;
   const caseNames = {asilo:"Asilo", residencia:"Residencia", ciudadania:"Ciudadanía", perdon:"Perdón (Waiver)"};
 
   let filesCount = 0;
-  Object.values(state.files).forEach(arr => filesCount += arr.length);
+  Object.values(state.files).forEach(arr => {
+    arr.forEach(f => { if(!f.deleted) filesCount++; });
+  });
+
+  // --- Datos personales: mostrar TODOS los campos definidos (omite vacíos)
+  const personalRows = Object.entries(PERSONAL_FIELD_LABELS).map(([key, label])=>{
+    const value = state.personal[key];
+    if(value === undefined || value === null || value === "") return "";
+    return `<div class="review-row"><span class="k">${esc(label)}</span><span class="v">${esc(value)}</span></div>`;
+  }).join("");
+
+  // --- Detalles del caso: usar etiquetas legibles y omitir vacíos
+  const caseRows = Object.entries(state.caseDetails).map(([k,v])=>{
+    if(v === undefined || v === null || v === "") return "";
+    const label = CASE_FIELD_LABELS[k] || k;
+    return `<div class="review-row"><span class="k">${esc(label)}</span><span class="v">${esc(v)}</span></div>`;
+  }).join("");
 
   let html = `
     <div class="review-block">
@@ -903,15 +1048,11 @@ function renderReviewStep(){
     </div>
     <div class="review-block">
       <h3>Datos personales</h3>
-      <div class="review-row"><span class="k">Nombre</span><span class="v">${esc(state.personal["nombres"]||"")} ${esc(state.personal["apellidos"]||"")}</span></div>
-      <div class="review-row"><span class="k">Fecha de nacimiento</span><span class="v">${esc(state.personal["nacimiento"]||"—")}</span></div>
-      <div class="review-row"><span class="k">País de nacimiento</span><span class="v">${esc(state.personal["pais-nacimiento"]||"—")}</span></div>
-      <div class="review-row"><span class="k">Teléfono</span><span class="v">${esc(state.personal["telefono"]||"—")}</span></div>
-      <div class="review-row"><span class="k">Dirección</span><span class="v">${esc(state.personal["direccion"]||"—")}</span></div>
+      ${personalRows || "<p class='hint'>Sin datos.</p>"}
     </div>
     <div class="review-block">
       <h3>Detalles del caso</h3>
-      ${Object.entries(state.caseDetails).map(([k,v])=>`<div class="review-row"><span class="k">${esc(k)}</span><span class="v">${esc(v||"—")}</span></div>`).join("") || "<p class='hint'>Sin datos adicionales.</p>"}
+      ${caseRows || "<p class='hint'>Sin datos adicionales.</p>"}
     </div>
     <div class="review-block">
       <h3>Documentos</h3>
@@ -924,6 +1065,15 @@ function renderReviewStep(){
 /* ============================================================
    NAVEGACIÓN
    ============================================================ */
+function markInvalidAndScroll(selector){
+  const el = document.querySelector(selector);
+  if(!el) return;
+  const field = el.closest(".field");
+  if(field) field.classList.add("invalid");
+  el.scrollIntoView({behavior:"smooth", block:"center"});
+  try { el.focus({preventScroll:true}); } catch(e){}
+}
+
 function validateStep(step){
   if(step===0){
     if(!state.caseType){ alert("Seleccione un tipo de trámite para continuar."); return false; }
@@ -931,13 +1081,37 @@ function validateStep(step){
   if(step===1){
     const required = ["nombres","apellidos","nacimiento","pais-nacimiento","telefono","direccion","estado-civil"];
     let ok = true;
+    let firstBad = null;
     required.forEach(f=>{
       const el = $("#p-"+f);
+      if(!el) return;
       const valid = el.value.trim() !== "";
-      el.closest(".field").classList.toggle("invalid", !valid);
-      if(!valid) ok = false;
+      const field = el.closest(".field");
+      if(field) field.classList.toggle("invalid", !valid);
+      if(!valid){ ok = false; if(!firstBad) firstBad = "#p-"+f; }
     });
-    if(!ok) alert("Complete los campos obligatorios marcados con *.");
+    if(!ok){
+      alert("Complete los campos obligatorios marcados con *.");
+      if(firstBad) markInvalidAndScroll(firstBad);
+    }
+    return ok;
+  }
+  if(step===2){
+    const ids = CASE_REQUIRED_FIELDS[state.caseType] || [];
+    let ok = true;
+    let firstBad = null;
+    ids.forEach(id=>{
+      const el = document.getElementById(id);
+      if(!el) return;
+      const valid = (el.value || "").trim() !== "";
+      const field = el.closest(".field");
+      if(field) field.classList.toggle("invalid", !valid);
+      if(!valid){ ok = false; if(!firstBad) firstBad = "#"+id; }
+    });
+    if(!ok){
+      alert("Complete los campos obligatorios marcados con *.");
+      if(firstBad) markInvalidAndScroll(firstBad);
+    }
     return ok;
   }
   if(step===4){
@@ -975,6 +1149,7 @@ async function submitApplication(){
       sessionToken: state.sessionToken,
       progreso: stateSnapshot()
     });
+    hideErrorBanner();
     $("#app").classList.add("hidden");
     $("#top-status").classList.add("hidden");
     $("#confirm-screen").classList.remove("hidden");

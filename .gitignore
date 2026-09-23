@@ -1,0 +1,27 @@
+# Sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores
+.vscode/
+.idea/
+*.swp
+
+# Node (por si más adelante agregamos tooling)
+node_modules/
+npm-debug.log*
+
+# Variables de entorno / secretos
+.env
+.env.local
+*.local
+
+# Archivos temporales
+*.tmp
+*.bak
+~$*
+
+# Apps Script
+.clasp.json
+appsscript.json

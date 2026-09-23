@@ -1,0 +1,56 @@
+# Despliega index.html a GitHub Pages automáticamente.
+#
+# Se ejecuta en cada push a `main` que modifique index.html o este workflow.
+# Para activarlo por primera vez, ve a:
+#   GitHub → Settings → Pages → Source: "GitHub Actions"
+#
+# La URL pública será algo como:
+#   https://googleseach.github.io/AngelLeal-Formulario/
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "index.html"
+      - ".github/workflows/deploy-pages.yml"
+  workflow_dispatch:  # permite dispararlo manualmente desde GitHub
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Preparar carpeta de publicación
+        run: |
+          mkdir -p _site
+          cp index.html _site/index.html
+          # Archivo para evitar indexación en buscadores (opcional)
+          echo "User-agent: *\nDisallow: /" > _site/robots.txt
+
+      - name: Configurar Pages
+        uses: actions/configure-pages@v5
+
+      - name: Subir artefacto
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Desplegar
+        id: deployment
+        uses: actions/deploy-pages@v4

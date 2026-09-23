@@ -717,8 +717,18 @@ const PERSONAL_FIELDS = ["nombres","apellidos","nacimiento","pais-nacimiento","t
 function renderPersonalStep(){
   PERSONAL_FIELDS.forEach(f=>{
     const el = $("#p-"+f);
-    if(el && state.personal[f]) el.value = state.personal[f];
-    if(el) el.addEventListener("input", ()=>{ state.personal[f]=el.value; scheduleSave(); });
+    if(!el) return;
+    // Refleja el valor guardado en el DOM (solo si hay valor guardado)
+    if(state.personal[f] !== undefined && state.personal[f] !== null && state.personal[f] !== ""){
+      el.value = state.personal[f];
+    }
+    // Engancha el listener UNA SOLA VEZ (evita duplicados al re-renderizar)
+    if(el.dataset.bound === "1") return;
+    el.dataset.bound = "1";
+    el.addEventListener("input", ()=>{
+      state.personal[f] = el.value;
+      scheduleSave();
+    });
   });
 }
 
@@ -773,7 +783,7 @@ function renderCaseDetailsStep(){
   }
   wrap.innerHTML = html;
 
-  // bind
+  // bind (el HTML se recrea cada vez, así que aquí SÍ hay que re-enganchar)
   $all("input, select, textarea", wrap).forEach(el=>{
     const key = el.id.replace("c-","");
     if(state.caseDetails[key]) el.value = state.caseDetails[key];

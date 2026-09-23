@@ -540,6 +540,22 @@ let saveTimer = null;
 function $(sel, root=document){return root.querySelector(sel);}
 function $all(sel, root=document){return Array.from(root.querySelectorAll(sel));}
 
+/**
+ * Escapa caracteres peligrosos para prevenir XSS al inyectar
+ * datos del usuario en innerHTML.
+ * Uso: `<div>${esc(nombre)}</div>`
+ */
+function esc(value){
+  if(value === null || value === undefined) return "";
+  return String(value).replace(/[&<>"']/g, c => ({
+    "&":"&amp;",
+    "<":"&lt;",
+    ">":"&gt;",
+    '"':"&quot;",
+    "'":"&#39;"
+  }[c]));
+}
+
 async function apiCall(action, payload){
   const body = JSON.stringify({action, ...payload});
   const res = await fetch(API_URL, {
@@ -657,7 +673,7 @@ function renderRail(){
   const rail = $("#rail");
   rail.innerHTML = STEPS.map((label,i)=>{
     const cls = i===state.currentStep ? "active" : (i<state.currentStep ? "done" : "");
-    return `<div class="rail-item ${cls}"><span class="rail-num">${i+1}</span><span class="rail-label">${label}</span></div>`;
+    return `<div class="rail-item ${cls}"><span class="rail-num">${i+1}</span><span class="rail-label">${esc(label)}</span></div>`;
   }).join("");
 
   $("#mobile-progress").innerHTML = STEPS.map((_,i)=>{
@@ -780,9 +796,9 @@ function renderTrips(){
   if(state.trips.length===0) state.trips.push({salida:"",regreso:"",pais:""});
   wrap.innerHTML = state.trips.map((t,i)=>`
     <div class="trip-row">
-      <div><label>Salida</label><input type="date" data-i="${i}" data-f="salida" value="${t.salida||''}"></div>
-      <div><label>Regreso</label><input type="date" data-i="${i}" data-f="regreso" value="${t.regreso||''}"></div>
-      <div><label>País visitado</label><input type="text" data-i="${i}" data-f="pais" value="${t.pais||''}"></div>
+      <div><label>Salida</label><input type="date" data-i="${i}" data-f="salida" value="${esc(t.salida||'')}"></div>
+      <div><label>Regreso</label><input type="date" data-i="${i}" data-f="regreso" value="${esc(t.regreso||'')}"></div>
+      <div><label>País visitado</label><input type="text" data-i="${i}" data-f="pais" value="${esc(t.pais||'')}"></div>
       <div><button type="button" class="btn-ghost-sm" data-remove="${i}">Quitar</button></div>
     </div>`).join("");
   $all("input", wrap).forEach(inp=>{
@@ -806,13 +822,13 @@ function renderDocsStep(){
   const wrap = $("#doc-groups");
   wrap.innerHTML = cfg.docs.map(d=>`
     <div class="doc-group">
-      <h3>${d.label}</h3>
-      <p class="hint">${d.hint}</p>
-      <div class="dropzone" data-key="${d.key}">
+      <h3>${esc(d.label)}</h3>
+      <p class="hint">${esc(d.hint)}</p>
+      <div class="dropzone" data-key="${esc(d.key)}">
         <p><strong>Haga clic para subir</strong> o arrastre el archivo aquí — PDF, JPG o PNG</p>
       </div>
-      <input type="file" data-key="${d.key}" accept=".pdf,.jpg,.jpeg,.png" multiple style="display:none">
-      <div class="file-list" data-list="${d.key}"></div>
+      <input type="file" data-key="${esc(d.key)}" accept=".pdf,.jpg,.jpeg,.png" multiple style="display:none">
+      <div class="file-list" data-list="${esc(d.key)}"></div>
     </div>`).join("");
 
   cfg.docs.forEach(d=>{
@@ -850,8 +866,8 @@ function renderFileList(key){
   const items = state.files[key] || [];
   list.innerHTML = items.map((f,i)=>`
     <div class="file-item">
-      <span class="fname">📄 ${f.name} <span class="fsize">(${(f.size/1024).toFixed(0)} KB)</span></span>
-      <button type="button" data-key="${key}" data-i="${i}">Quitar</button>
+      <span class="fname">📄 ${esc(f.name)} <span class="fsize">(${(f.size/1024).toFixed(0)} KB)</span></span>
+      <button type="button" data-key="${esc(key)}" data-i="${i}">Quitar</button>
     </div>`).join("");
   $all("button[data-key]", list).forEach(btn=>{
     btn.addEventListener("click", ()=>{
@@ -873,23 +889,23 @@ function renderReviewStep(){
   let html = `
     <div class="review-block">
       <h3>Trámite</h3>
-      <div class="review-row"><span class="k">Tipo de caso</span><span class="v">${caseNames[state.caseType]||"—"}</span></div>
+      <div class="review-row"><span class="k">Tipo de caso</span><span class="v">${esc(caseNames[state.caseType]||"—")}</span></div>
     </div>
     <div class="review-block">
       <h3>Datos personales</h3>
-      <div class="review-row"><span class="k">Nombre</span><span class="v">${state.personal["nombres"]||""} ${state.personal["apellidos"]||""}</span></div>
-      <div class="review-row"><span class="k">Fecha de nacimiento</span><span class="v">${state.personal["nacimiento"]||"—"}</span></div>
-      <div class="review-row"><span class="k">País de nacimiento</span><span class="v">${state.personal["pais-nacimiento"]||"—"}</span></div>
-      <div class="review-row"><span class="k">Teléfono</span><span class="v">${state.personal["telefono"]||"—"}</span></div>
-      <div class="review-row"><span class="k">Dirección</span><span class="v">${state.personal["direccion"]||"—"}</span></div>
+      <div class="review-row"><span class="k">Nombre</span><span class="v">${esc(state.personal["nombres"]||"")} ${esc(state.personal["apellidos"]||"")}</span></div>
+      <div class="review-row"><span class="k">Fecha de nacimiento</span><span class="v">${esc(state.personal["nacimiento"]||"—")}</span></div>
+      <div class="review-row"><span class="k">País de nacimiento</span><span class="v">${esc(state.personal["pais-nacimiento"]||"—")}</span></div>
+      <div class="review-row"><span class="k">Teléfono</span><span class="v">${esc(state.personal["telefono"]||"—")}</span></div>
+      <div class="review-row"><span class="k">Dirección</span><span class="v">${esc(state.personal["direccion"]||"—")}</span></div>
     </div>
     <div class="review-block">
       <h3>Detalles del caso</h3>
-      ${Object.entries(state.caseDetails).map(([k,v])=>`<div class="review-row"><span class="k">${k}</span><span class="v">${v||"—"}</span></div>`).join("") || "<p class='hint'>Sin datos adicionales.</p>"}
+      ${Object.entries(state.caseDetails).map(([k,v])=>`<div class="review-row"><span class="k">${esc(k)}</span><span class="v">${esc(v||"—")}</span></div>`).join("") || "<p class='hint'>Sin datos adicionales.</p>"}
     </div>
     <div class="review-block">
       <h3>Documentos</h3>
-      <div class="review-row"><span class="k">Archivos adjuntos</span><span class="v">${filesCount}</span></div>
+      <div class="review-row"><span class="k">Archivos adjuntos</span><span class="v">${esc(filesCount)}</span></div>
     </div>
   `;
   $("#review-content").innerHTML = html;

@@ -1,10 +1,9 @@
-# Despliega index.html a GitHub Pages automáticamente.
+# Despliega index.html y la carpeta assets/ a GitHub Pages.
 #
-# Se ejecuta en cada push a `main` que modifique index.html o este workflow.
-# Para activarlo por primera vez, ve a:
-#   GitHub → Settings → Pages → Source: "GitHub Actions"
+# Se ejecuta en cada push a `main` que modifique index.html, assets/
+# o este workflow.
 #
-# La URL pública será algo como:
+# La URL pública es:
 #   https://googleseach.github.io/AngelLeal-Formulario/
 
 name: Deploy to GitHub Pages
@@ -14,6 +13,7 @@ on:
     branches: [ main ]
     paths:
       - "index.html"
+      - "assets/**"
       - ".github/workflows/deploy-pages.yml"
   workflow_dispatch:  # permite dispararlo manualmente desde GitHub
 
@@ -39,9 +39,14 @@ jobs:
       - name: Preparar carpeta de publicación
         run: |
           mkdir -p _site
+          # Copia el HTML de entrada
           cp index.html _site/index.html
-          # Archivo para evitar indexación en buscadores (opcional)
-          echo "User-agent: *\nDisallow: /" > _site/robots.txt
+          # Copia toda la carpeta assets/ si existe
+          if [ -d "assets" ]; then
+            cp -r assets _site/assets
+          fi
+          # Archivo para evitar indexación en buscadores
+          printf "User-agent: *\nDisallow: /\n" > _site/robots.txt
 
       - name: Configurar Pages
         uses: actions/configure-pages@v5
